@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>كشف حساب عميل</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 20px; background: #f1f5f9; margin: 0; }
+  .wrap { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  h2 { color: #0f172a; margin: 0 0 20px; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+  .filters { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; padding: 15px; background: #eff6ff; border-radius: 8px; align-items: end; }
+  .filter-group { display: flex; flex-direction: column; gap: 5px; }
+  .filter-group label { font-size: 13px; font-weight: 600; color: #475569; }
+  .filter-group input, .filter-group select { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; min-width: 200px; }
+  .filter-group select { min-width: 280px; }
+  .search-box { position: relative; }
+  .clear-search { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; font-size: 11px; line-height: 1; display: none; }
+  .clear-search.show { display: block; }
+  .customer-count { font-size: 11px; color: #64748b; margin-top: 3px; }
+  .btn { padding: 10px 20px; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .btn-print { background: #2563eb; }
+  .btn-pdf { background: #dc2626; }
+  .btn-warn { background: #dc2626; }
+  .btn-success { background: #16a34a; }
+  .actions { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+  .status { padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 14px; }
+  .status.loading { background: #fef3c7; color: #92400e; }
+  .status.success { background: #d1fae5; color: #065f46; }
+  .status.error { background: #fee2e2; color: #991b1b; }
+  table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+  th { background: #2563eb; color: white; padding: 10px; text-align: right; font-size: 12px; }
+  td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+  .num { text-align: left; direction: ltr; font-family: 'Consolas', monospace; }
+  .debit { color: #dc2626; font-weight: 600; }
+  .credit { color: #16a34a; font-weight: 600; }
+  .balance { font-weight: bold; background: #f8fafc; }
+  .type-sinv { color: #1d4ed8; font-weight: bold; }
+  .type-rec { color: #16a34a; font-weight: bold; }
+  .type-pay { color: #be185d; font-weight: bold; }
+  .type-cn { color: #d97706; font-weight: bold; }
+  .type-je { color: #78350f; font-weight: bold; }
+  .opening-row { background: #fef3c7 !important; font-weight: bold; }
+  .lines-row { background: #fafafa !important; }
+  .lines-row td { padding: 5px 30px; }
+  .lines-table { width: 95%; margin: 5px auto; border: 1px solid #e2e8f0; font-size: 11px; background: white; }
+  .lines-table th { background: #64748b; font-size: 10px; padding: 5px 8px; color: white; }
+  .lines-table td { padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }
+  .lines-table .customer-line { background: #dbeafe !important; font-weight: bold; }
+  .fx-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; background: #8b5cf6; color: white; margin-right: 5px; }
+  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+  .card { padding: 15px; border-radius: 8px; color: white; }
+  .card-debit { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+  .card-credit { background: linear-gradient(135deg, #10b981, #047857); }
+  .card-balance { background: linear-gradient(135deg, #2563eb, #1e40af); }
+  .card-opening { background: linear-gradient(135deg, #f59e0b, #b45309); }
+  .card-label { font-size: 12px; opacity: 0.9; }
+  .card-value { font-size: 22px; font-weight: bold; margin-top: 5px; }
+  .customer-info { background: #eff6ff; border-right: 4px solid #2563eb; padding: 12px 15px; border-radius: 6px; margin-bottom: 15px; font-size: 14px; }
+  .customer-info b { color: #1e40af; font-size: 16px; }
+  .debug { background: #1e293b; color: #4ade80; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; max-height: 200px; overflow: auto; margin-top: 10px; direction: ltr; text-align: left; }
+  
+  /* ✅ تنسيق خاص لـ PDF */
+  #pdfPrintArea { display: none; }
+  
+  @media print {
+    .filters, .actions, .btn, .status, .debug { display: none !important; }
+    body { background: white; padding: 0; }
+    .wrap { box-shadow: none; padding: 0; }
+    th { background: #333 !important; -webkit-print-color-adjust: exact; color: white !important; }
+    .card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+<!-- ✅ مكتبة html2pdf - تدعم العربية تلقائيًا -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <h2>👤 كشف حساب عميل تفصيلي</h2>
+  <div class="filters">
+    <div class="filter-group"><label>من تاريخ</label><input type="date" id="dateFrom"></div>
+    <div class="filter-group"><label>إلى تاريخ</label><input type="date" id="dateTo"></div>
+    <div class="filter-group">
+      <label>🔎 بحث عن عميل</label>
+      <div class="search-box">
+        <input type="text" id="custSearch" placeholder="اكتب جزء من الاسم...">
+        <button class="clear-search" id="clearSearch">✕</button>
+      </div>
+      <div class="customer-count" id="custCount"></div>
+    </div>
+    <div class="filter-group">
+      <label>👤 اختر العميل</label>
+      <select id="custSelect"><option value="">-- اختر --</option></select>
+    </div>
+    <button class="btn" id="btnLoad">📊 عرض التقرير</button>
+    <button class="btn btn-warn" id="btnReload">♻️ إعادة التحميل</button>
+  </div>
+  <div id="status" class="status" style="display:none;"></div>
+  <div id="debug" class="debug" style="display:none;"></div>
+  <div class="actions" style="display:none;" id="actionBar">
+    <button class="btn btn-print" id="btnPrint">🖨️ طباعة</button>
+    <button class="btn btn-pdf" id="btnPdf">📄 تصدير PDF</button>
+    <button class="btn btn-success" id="btnExport">📥 تصدير Excel</button>
+    <button class="btn" id="btnDebug">🐛 السجل</button>
+  </div>
+  <div id="customerInfo"></div>
+  <div id="summary" class="summary-cards"></div>
+  <div id="reportContainer"></div>
+  
+  <!-- ✅ منطقة مخفية لطباعة PDF -->
+  <div id="pdfPrintArea"></div>
+</div>
+<script>
+var customersMap={},itemsMap={},taxCodesMap={},accountsMap={},suppliersMap={},allCustomersList=[];
+var allInvoices=[],allReceipts=[],allPayments=[],allCreditNotes=[],allJournalEntries=[];
+var logs=[],dataLoaded=false;
+var lastMovements=[];
+
+function log(m){var l='['+new Date().toLocaleTimeString('en-US')+'] '+m;logs.push(l);console.log(l);var d=document.getElementById('debug');if(d){d.textContent=logs.slice(-60).join('\n');d.scrollTop=d.scrollHeight;}}
+function fmt(n){return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtQty(n){return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:3});}
+function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function setStatus(m,t){var s=document.getElementById('status');s.textContent=m;s.className='status '+t;s.style.display='block';}
+
+function apiRequest(p,t){return new Promise(function(rs,rj){var rid='r'+Date.now()+'_'+Math.floor(Math.random()*100000);log('→ '+p);var done=false;var h=function(e){if(done)return;if(e.data&&e.data.requestId===rid){done=true;window.removeEventListener('message',h);clearTimeout(tm);if(e.data.error){rj(e.data.error);}else{rs(e.data.body);}}};var tm=setTimeout(function(){if(done)return;done=true;window.removeEventListener('message',h);rj('timeout');},t||120000);window.addEventListener('message',h);window.parent.postMessage({type:'api-request',method:'GET',path:'/api4/'+p,requestId:rid},'*');});}
+
+function extractTaxRate(t){if(!t)return 0;if(typeof t.rate==='number')return t.rate;if(t.components&&t.components.length){var tt=0;for(var i=0;i<t.components.length;i++)if(typeof t.components[i].rate==='number')tt+=t.components[i].rate;if(tt>0)return tt;}var n=(t.name||'')+'';var m=n.match(/(\d+(?:\.\d+)?)\s*%/);if(m)return parseFloat(m[1]);return 0;}
+
+function calcLineNetSigned(l){
+  var n=0;
+  var price = (l.salesUnitPrice != null ? l.salesUnitPrice : 0) || (l.purchaseUnitPrice != null ? l.purchaseUnitPrice : 0);
+  var qty = l.qty;
+  if(price !== 0){
+    var effectiveQty = (qty == null || qty === 0) ? 1 : qty;
+    var g = effectiveQty * price;
+    var d = l.discountAmount || (g * (l.discountPercentage || 0) / 100);
+    n = g - d;
+  }
+  else if(l.amount != null && l.amount !== 0){
+    n = l.amount;
+  }
+  return n;
+}
+
+function calcInvoiceTotalSigned(i){
+  var sales=0, tax=0;
+  (i.lines||[]).forEach(function(l){
+    var n = calcLineNetSigned(l);
+    var r = taxCodesMap[l.taxCode] || 0;
+    if(i.amountsIncludeTax){
+      var b = n/(1+r/100);
+      tax += (n-b);
+      sales += b;
+    } else {
+      tax += (n*r/100);
+      sales += n;
+    }
+  });
+  return sales + tax;
+}
+
+function applyExchangeRate(amount, exchangeRate, isInverse){
+  if(!exchangeRate || exchangeRate === 0 || exchangeRate === 1) return amount;
+  if(isInverse){
+    return amount / exchangeRate;
+  } else {
+    return amount * exchangeRate;
+  }
+}
+
+function isForeignCurrency(doc){
+  return doc.exchangeRate && doc.exchangeRate !== 0 && doc.exchangeRate !== 1;
+}
+
+function calcReceiptTotal(i){
+  var t = 0;
+  (i.lines||[]).forEach(function(l){
+    t += Math.abs(l.amount || 0);
+  });
+  return applyExchangeRate(t, i.exchangeRate, i.exchangeRateIsInverse);
+}
+
+function calcInvoiceTotal(i){
+  var signed = calcInvoiceTotalSigned(i);
+  return applyExchangeRate(Math.abs(signed), i.exchangeRate, i.exchangeRateIsInverse);
+}
+
+function calcInvoiceTotalSignedLocal(i){
+  var signed = calcInvoiceTotalSigned(i);
+  var localAbs = applyExchangeRate(Math.abs(signed), i.exchangeRate, i.exchangeRateIsInverse);
+  return signed < 0 ? -localAbs : localAbs;
+}
+
+function getOriginalAmount(i){
+  var t = 0;
+  (i.lines||[]).forEach(function(l){
+    t += Math.abs(l.amount || 0);
+  });
+  return t;
+}
+
+function getOriginalInvoiceAmount(i){
+  return Math.abs(calcInvoiceTotalSigned(i));
+}
+
+function isReceiptReallyForCustomer(doc, customerKey){
+  if(doc.payee === 2) return false;
+  if(doc.supplier) return false;
+  var lines = doc.lines || [];
+  for(var i=0; i<lines.length; i++){
+    if(lines[i].accountsPayableSupplier) return false;
+  }
+  for(var j=0; j<lines.length; j++){
+    if(lines[j].accountsReceivableCustomer && lines[j].accountsReceivableCustomer !== customerKey){
+      return false;
+    }
+  }
+  for(var k=0; k<lines.length; k++){
+    if(lines[k].accountsReceivableCustomer === customerKey) return true;
+  }
+  if(doc.customer === customerKey) return true;
+  return false;
+}
+
+function loadAllData(){
+  log('═══════ بدء التحميل ═══════');
+  setStatus('🔄 الضرائب...','loading');
+  return apiRequest('tax-code-batch?pageSize=500').then(function(d){(d.items||[]).forEach(function(t){taxCodesMap[t.key]=extractTaxRate(t.item);});setStatus('🔄 الأصناف...','loading');return apiRequest('inventory-item-batch?pageSize=5000');})
+  .then(function(d){(d.items||[]).forEach(function(it){itemsMap[it.key]={name:it.item.itemName||'صنف',code:it.item.itemCode||'',unit:it.item.unitName||''};});setStatus('🔄 الحسابات...','loading');return apiRequest('chart-of-accounts-batch?pageSize=2000').catch(function(){return{items:[]};});})
+  .then(function(d){(d.items||[]).forEach(function(a){accountsMap[a.key]=a.item.name||'حساب';});setStatus('🔄 الموردين...','loading');return apiRequest('supplier-batch?pageSize=5000');})
+  .then(function(d){(d.items||[]).forEach(function(c){suppliersMap[c.key]=c.item.name||'-';});setStatus('🔄 العملاء...','loading');return apiRequest('customer-batch?pageSize=5000');})
+  .then(function(d){(d.items||[]).forEach(function(c){customersMap[c.key]=c.item.name||'بدون اسم';});allCustomersList=[];for(var k in customersMap)allCustomersList.push([k,customersMap[k]]);allCustomersList.sort(function(a,b){return a[1].localeCompare(b[1],'ar');});populateCustomerSelect('');setStatus('🔄 فواتير البيع...','loading');return apiRequest('sales-invoice-batch?pageSize=10000');})
+  .then(function(d){allInvoices=d.items||[];log('✅ فواتير بيع: '+allInvoices.length);setStatus('🔄 سندات القبض...','loading');return apiRequest('receipt-batch?pageSize=10000');})
+  .then(function(d){allReceipts=d.items||[];setStatus('🔄 سندات الصرف...','loading');return apiRequest('payment-batch?pageSize=10000');})
+  .then(function(d){allPayments=d.items||[];setStatus('🔄 الإشعارات الدائنة...','loading');return apiRequest('credit-note-batch?pageSize=5000').catch(function(){return{items:[]};});})
+  .then(function(d){allCreditNotes=d.items||[];log('✅ إشعارات دائنة: '+allCreditNotes.length);setStatus('🔄 قيود اليومية...','loading');return apiRequest('journal-entry-batch?pageSize=10000');})
+  .then(function(d){allJournalEntries=d.items||[];dataLoaded=true;setStatus('✅ جاهز','success');document.getElementById('actionBar').style.display='flex';})
+  .catch(function(err){log('✗ '+err);setStatus('❌ فشل','error');document.getElementById('debug').style.display='block';});
+}
+
+function populateCustomerSelect(s){var sel=document.getElementById('custSelect');var cv=sel.value;var sr=(s||'').trim().toLowerCase();sel.innerHTML='<option value="">-- اختر --</option>';var f=sr?allCustomersList.filter(function(e){return e[1].toLowerCase().indexOf(sr)!==-1;}):allCustomersList;for(var i=0;i<f.length;i++){var o=document.createElement('option');o.value=f[i][0];o.textContent=f[i][1];sel.appendChild(o);}if(cv)for(var j=0;j<f.length;j++)if(f[j][0]===cv){sel.value=cv;break;}var ce=document.getElementById('custCount');if(sr){ce.textContent='✓ '+f.length+' من '+allCustomersList.length;ce.style.color=f.length>0?'#059669':'#dc2626';}else{ce.textContent='إجمالي: '+allCustomersList.length;ce.style.color='#64748b';}}
+
+function getCounterAccountName(l){if(l.accountsReceivableCustomer&&customersMap[l.accountsReceivableCustomer])return'👤 '+customersMap[l.accountsReceivableCustomer];if(l.accountsPayableSupplier)return'🏭 '+(suppliersMap[l.accountsPayableSupplier]||'مورد');if(l.bankOrCashAccount)return'🏦 '+(accountsMap[l.bankOrCashAccount]||'بنك');if(l.employee)return'👷 موظف';if(l.fixedAsset)return'🏢 أصل';if(l.account)return'📊 '+(accountsMap[l.account]||'حساب');return'-';}
+
+function buildReport(){
+  var custKey=document.getElementById('custSelect').value;
+  var dFrom=document.getElementById('dateFrom').value,dTo=document.getElementById('dateTo').value;
+  if(!custKey){alert('اختر عميل');return;}if(!dataLoaded){alert('انتظر');return;}
+  var movements=[];
+  
+  allInvoices.forEach(function(v){
+    if(v.item.customer===custKey){
+      var isFx = isForeignCurrency(v.item);
+      movements.push({
+        date:(v.item.issueDate||'').split('T')[0],
+        type:'فاتورة بيع',
+        typeClass:'type-sinv',
+        ref:v.item.reference||'-',
+        desc:v.item.description||'',
+        debit:calcInvoiceTotal(v.item),
+        credit:0,
+        raw:v.item,
+        kind:'invoice',
+        isFx: isFx,
+        originalAmount: isFx ? getOriginalInvoiceAmount(v.item) : 0,
+        exchangeRate: v.item.exchangeRate || 0
+      });
+    }
+  });
+  
+  allReceipts.forEach(function(r){
+    if(r.item.customer===custKey){
+      if(!isReceiptReallyForCustomer(r.item, custKey)){
+        log('⛔ تخطي سند قبض #' + (r.item.reference||'?'));
+        return;
+      }
+      var isFx = isForeignCurrency(r.item);
+      movements.push({
+        date:(r.item.date||'').split('T')[0],
+        type:'سند قبض (تحصيل من العميل)',
+        typeClass:'type-rec',
+        ref:r.item.reference||'-',
+        desc:r.item.description||'',
+        debit:0,
+        credit:calcReceiptTotal(r.item),
+        raw:r.item,
+        kind:'receipt',
+        isFx: isFx,
+        originalAmount: isFx ? getOriginalAmount(r.item) : 0,
+        exchangeRate: r.item.exchangeRate || 0
+      });
+    }
+  });
+  
+  // ✅ سندات الصرف - مدين (رد للعميل = يزيد المستحق علينا) + فحص ذكي
+allPayments.forEach(function(p){
+    if(p.item.customer===custKey){
+      if(!isReceiptReallyForCustomer(p.item, custKey)){
+        log('⛔ تخطي سند صرف #' + (p.item.reference||'?'));
+        return;
+      }
+      var isFx = isForeignCurrency(p.item);
+      movements.push({
+        date:(p.item.date||'').split('T')[0],
+        type:'سند صرف (رد للعميل)',
+        typeClass:'type-pay',
+        ref:p.item.reference||'-',
+        desc:p.item.description||'',
+        debit:calcReceiptTotal(p.item),  // ✅ صحيح - يزيد المديونية
+        credit:0,                          // ✅ صحيح
+        raw:p.item,
+        kind:'payment',
+        isFx: isFx,
+        originalAmount: isFx ? getOriginalAmount(p.item) : 0,
+        exchangeRate: p.item.exchangeRate || 0
+      });
+    }
+});
+  
+  allCreditNotes.forEach(function(c){
+    if(c.item.customer===custKey){
+      var signedLocal = calcInvoiceTotalSignedLocal(c.item);
+      var isNegative = signedLocal < 0;
+      var absLocal = Math.abs(signedLocal);
+      var isFx = isForeignCurrency(c.item);
+      movements.push({
+        date:(c.item.issueDate||'').split('T')[0],
+        type: isNegative ? 'إشعار دائن (مصاريف إضافية)' : 'إشعار دائن (مرتجع مبيعات)',
+        typeClass:'type-cn',
+        ref:c.item.reference||'-',
+        desc:c.item.description||'',
+        debit: isNegative ? absLocal : 0,
+        credit: isNegative ? 0 : absLocal,
+        raw:c.item,
+        kind:'creditNote',
+        isFx: isFx,
+        originalAmount: isFx ? getOriginalInvoiceAmount(c.item) : 0,
+        exchangeRate: c.item.exchangeRate || 0
+      });
+    }
+  });
+  
+  allJournalEntries.forEach(function(je){
+    var cd=0,cc=0,cl=[];
+    (je.item.lines||[]).forEach(function(l){
+      if(l.accountsReceivableCustomer===custKey){
+        cd+=(l.debit||0);
+        cc+=(l.credit||0);
+        cl.push(l);
+      }
+    });
+    if(cl.length>0){
+      movements.push({
+        date:(je.item.date||'').split('T')[0],
+        type:'قيد يومية',
+        typeClass:'type-je',
+        ref:je.item.reference||'-',
+        desc:je.item.narration||'',
+        debit:cd,
+        credit:cc,
+        raw:je.item,
+        kind:'journalEntry',
+        isFx: false,
+        originalAmount: 0,
+        exchangeRate: 0
+      });
+    }
+  });
+  
+  movements.sort(function(a,b){
+    if(a.date!==b.date)return a.date.localeCompare(b.date);
+    var o={invoice:1,creditNote:2,journalEntry:3,receipt:4,payment:5};
+    return(o[a.kind]||6)-(o[b.kind]||6);
+  });
+  
+  renderReport(movements,custKey,dFrom,dTo);
+}
+
+function renderReport(movements,custKey,dFrom,dTo){
+  var custName=customersMap[custKey]||'-';
+  document.getElementById('customerInfo').innerHTML='<div class="customer-info">👤 <b>'+escapeHtml(custName)+'</b>'+(dFrom||dTo?' &nbsp;|&nbsp; الفترة: '+(dFrom||'البداية')+' إلى '+(dTo||'اليوم'):'')+'</div>';
+  var ob=0,ipm=[],td=0,tc=0;
+  movements.forEach(function(m){if(dFrom&&m.date<dFrom)ob+=(m.debit-m.credit);else if(dTo&&m.date>dTo){}else{ipm.push(m);td+=m.debit;tc+=m.credit;}});
+  var fb=ob+td-tc;
+  
+  lastMovements = ipm;
+  window.lastReportData = {
+    customer: custName,
+    custKey: custKey,
+    dFrom: dFrom,
+    dTo: dTo,
+    openingBalance: ob,
+    movements: ipm,
+    totalDebit: td,
+    totalCredit: tc,
+    finalBalance: fb
+  };
+  
+  var bl=fb>0?'(مستحق على العميل)':(fb<0?'(له عندنا)':'(صفر)');
+  document.getElementById('summary').innerHTML='<div class="card card-opening"><div class="card-label">📥 الرصيد المنقول</div><div class="card-value">'+fmt(ob)+'</div></div><div class="card card-debit"><div class="card-label">⬆️ إجمالي المدين (مبيعات)</div><div class="card-value">'+fmt(td)+'</div></div><div class="card card-credit"><div class="card-label">⬇️ إجمالي الدائن (تحصيلات)</div><div class="card-value">'+fmt(tc)+'</div></div><div class="card card-balance"><div class="card-label">💰 الرصيد '+bl+'</div><div class="card-value">'+fmt(Math.abs(fb))+'</div></div>';
+  var h='<table id="reportTable"><thead><tr><th>#</th><th>التاريخ</th><th>النوع</th><th>المرجع</th><th>البيان</th><th>مدين (+)</th><th>دائن (-)</th><th>الرصيد</th></tr></thead><tbody>';
+  if(dFrom&&ob!==0)h+='<tr class="opening-row"><td>-</td><td>'+dFrom+'</td><td colspan="3">📥 رصيد منقول</td><td class="num">'+(ob>0?fmt(ob):'-')+'</td><td class="num">'+(ob<0?fmt(-ob):'-')+'</td><td class="num balance">'+fmt(ob)+'</td></tr>';
+  if(ipm.length===0)h+='<tr><td colspan="8" style="text-align:center;padding:30px;">لا توجد حركات</td></tr>';
+  var rb=ob,cnt=1;
+  ipm.forEach(function(m){
+    rb+=(m.debit-m.credit);
+    var descHtml = escapeHtml(m.desc);
+    if(m.isFx){
+      descHtml += ' <span class="fx-badge">💱 ' + fmt(m.originalAmount) + ' × ' + m.exchangeRate + '</span>';
+    }
+    h+='<tr><td>'+(cnt++)+'</td><td>'+m.date+'</td><td><span class="'+m.typeClass+'">'+m.type+'</span></td><td>'+escapeHtml(m.ref)+'</td><td>'+descHtml+'</td><td class="num debit">'+(m.debit>0?fmt(m.debit):'-')+'</td><td class="num credit">'+(m.credit>0?fmt(m.credit):'-')+'</td><td class="num balance">'+fmt(rb)+'</td></tr>';
+    if((m.kind==='invoice'||m.kind==='creditNote')&&m.raw.lines&&m.raw.lines.length>0){
+      h+='<tr class="lines-row"><td colspan="8"><table class="lines-table"><thead><tr><th>كود</th><th>الصنف/البيان</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>';
+      m.raw.lines.forEach(function(l){
+        var dn,dc,lts,price;
+        price = (l.salesUnitPrice != null ? l.salesUnitPrice : 0) || (l.purchaseUnitPrice != null ? l.purchaseUnitPrice : 0);
+        if(l.item && itemsMap[l.item]){
+          dc = itemsMap[l.item].code || '-';
+          dn = itemsMap[l.item].name;
+        } else {
+          dc = '📊';
+          dn = l.lineDescription || (l.account && accountsMap[l.account]) || 'حساب عام';
+        }
+        if(price !== 0){
+          var eq = (l.qty == null || l.qty === 0) ? 1 : l.qty;
+          lts = eq * price;
+        } else {
+          lts = l.amount || 0;
+        }
+        h+='<tr><td>'+escapeHtml(dc)+'</td><td>'+escapeHtml(dn)+'</td><td class="num">'+(l.qty!=null?fmtQty(l.qty):'-')+'</td><td class="num">'+(price?fmt(Math.abs(price)):'-')+'</td><td class="num">'+fmt(Math.abs(lts))+'</td></tr>';
+      });
+      h+='</tbody></table></td></tr>';
+    }
+    if((m.kind==='payment'||m.kind==='receipt')&&m.raw.lines&&m.raw.lines.length>0){
+      h+='<tr class="lines-row"><td colspan="8"><table class="lines-table"><thead><tr><th>البيان</th><th>المبلغ (أصلي)</th>'+(m.isFx?'<th>المبلغ (محلي)</th>':'')+'</tr></thead><tbody>';
+      m.raw.lines.forEach(function(l){
+        var origAmt = Math.abs(l.amount||0);
+        var localAmt = applyExchangeRate(origAmt, m.raw.exchangeRate, m.raw.exchangeRateIsInverse);
+        h+='<tr><td>'+escapeHtml(l.lineDescription||m.raw.description||'دفعة')+'</td><td class="num">'+fmt(origAmt)+'</td>'+(m.isFx?'<td class="num" style="color:#8b5cf6;font-weight:bold;">'+fmt(localAmt)+'</td>':'')+'</tr>';
+      });
+      h+='</tbody></table></td></tr>';
+    }
+    if(m.kind==='journalEntry'&&m.raw.lines&&m.raw.lines.length>0){
+      h+='<tr class="lines-row"><td colspan="8"><table class="lines-table"><thead><tr><th>الحساب/الطرف</th><th>البيان</th><th>مدين</th><th>دائن</th></tr></thead><tbody>';
+      m.raw.lines.forEach(function(l){var ca=getCounterAccountName(l);var io=l.accountsReceivableCustomer===custKey;h+='<tr'+(io?' class="customer-line"':'')+'><td>'+ca+(io?' ⭐':'')+'</td><td>'+escapeHtml(l.lineDescription||'-')+'</td><td class="num debit">'+(l.debit>0?fmt(l.debit):'-')+'</td><td class="num credit">'+(l.credit>0?fmt(l.credit):'-')+'</td></tr>';});
+      h+='</tbody></table></td></tr>';
+    }
+  });
+  h+='<tr style="background:#2563eb;color:white;font-weight:bold;"><td colspan="5" style="padding:14px 10px;">الإجماليات</td><td class="num">'+fmt(td)+'</td><td class="num">'+fmt(tc)+'</td><td class="num">'+fmt(fb)+'</td></tr></tbody></table>';
+  document.getElementById('reportContainer').innerHTML=h;
+}
+
+function buildFlatRows(){
+  if(!window.lastReportData) return [];
+  var data = window.lastReportData;
+  var rows = [];
+  var serial = 1;
+  var rb = data.openingBalance;
+  
+  if(data.dFrom && data.openingBalance !== 0){
+    rows.push({
+      serial: '-',
+      date: data.dFrom,
+      itemCode: '',
+      itemName: 'رصيد منقول',
+      type: 'افتتاحي',
+      qty: '',
+      price: '',
+      ref: '',
+      desc: 'رصيد منقول من فترة سابقة',
+      debit: data.openingBalance > 0 ? data.openingBalance : 0,
+      credit: data.openingBalance < 0 ? -data.openingBalance : 0,
+      balance: data.openingBalance
+    });
+  }
+  
+  data.movements.forEach(function(m){
+    rb += (m.debit - m.credit);
+    if((m.kind === 'invoice' || m.kind === 'creditNote') && m.raw.lines && m.raw.lines.length > 0){
+      var firstLine = true;
+      m.raw.lines.forEach(function(l){
+        var price = (l.salesUnitPrice != null ? l.salesUnitPrice : 0) || (l.purchaseUnitPrice != null ? l.purchaseUnitPrice : 0);
+        var itemCode = '', itemName = '';
+        if(l.item && itemsMap[l.item]){
+          itemCode = itemsMap[l.item].code || '';
+          itemName = itemsMap[l.item].name || '';
+        } else {
+          itemName = l.lineDescription || (l.account && accountsMap[l.account]) || 'حساب عام';
+        }
+        var lineTotal;
+        if(price !== 0){
+          var eq = (l.qty == null || l.qty === 0) ? 1 : l.qty;
+          lineTotal = eq * price;
+        } else {
+          lineTotal = l.amount || 0;
+        }
+        rows.push({
+          serial: firstLine ? serial : '',
+          date: firstLine ? m.date : '',
+          itemCode: itemCode,
+          itemName: itemName,
+          type: firstLine ? m.type : '',
+          qty: l.qty != null ? l.qty : '',
+          price: price ? Math.abs(price) : '',
+          ref: firstLine ? m.ref : '',
+          desc: firstLine ? m.desc : '',
+          debit: firstLine ? m.debit : 0,
+          credit: firstLine ? m.credit : 0,
+          balance: firstLine ? rb : '',
+          lineTotal: Math.abs(lineTotal)
+        });
+        firstLine = false;
+      });
+    }
+    else if((m.kind === 'payment' || m.kind === 'receipt') && m.raw.lines && m.raw.lines.length > 0){
+      var firstLine = true;
+      m.raw.lines.forEach(function(l){
+        var origAmt = Math.abs(l.amount || 0);
+        var localAmt = applyExchangeRate(origAmt, m.raw.exchangeRate, m.raw.exchangeRateIsInverse);
+        rows.push({
+          serial: firstLine ? serial : '',
+          date: firstLine ? m.date : '',
+          itemCode: '',
+          itemName: l.lineDescription || m.raw.description || 'دفعة',
+          type: firstLine ? m.type : '',
+          qty: '',
+          price: '',
+          ref: firstLine ? m.ref : '',
+          desc: firstLine ? m.desc : '',
+          debit: firstLine ? m.debit : 0,
+          credit: firstLine ? m.credit : 0,
+          balance: firstLine ? rb : '',
+          lineTotal: localAmt
+        });
+        firstLine = false;
+      });
+    }
+    else if(m.kind === 'journalEntry' && m.raw.lines && m.raw.lines.length > 0){
+      var firstLine = true;
+      m.raw.lines.forEach(function(l){
+        var ca = getCounterAccountName(l).replace(/[🏭👤🏦👷🏢📊]/g, '').trim();
+        rows.push({
+          serial: firstLine ? serial : '',
+          date: firstLine ? m.date : '',
+          itemCode: '',
+          itemName: ca,
+          type: firstLine ? m.type : '',
+          qty: '',
+          price: '',
+          ref: firstLine ? m.ref : '',
+          desc: firstLine ? (m.desc || l.lineDescription || '') : (l.lineDescription || ''),
+          debit: firstLine ? m.debit : (l.debit || 0),
+          credit: firstLine ? m.credit : (l.credit || 0),
+          balance: firstLine ? rb : '',
+          lineTotal: ''
+        });
+        firstLine = false;
+      });
+    }
+    else {
+      rows.push({
+        serial: serial,
+        date: m.date,
+        itemCode: '',
+        itemName: '',
+        type: m.type,
+        qty: '',
+        price: '',
+        ref: m.ref,
+        desc: m.desc,
+        debit: m.debit,
+        credit: m.credit,
+        balance: rb,
+        lineTotal: ''
+      });
+    }
+    serial++;
+  });
+  return rows;
+}
+
+function exportExcel(){
+  if(!window.lastReportData){alert('قم بعرض التقرير أولاً');return;}
+  var data = window.lastReportData;
+  var rows = buildFlatRows();
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>';
+  html += 'table{border-collapse:collapse;font-family:Arial;direction:rtl;font-size:11px;}';
+  html += 'th{background:#2563eb;color:white;padding:8px 5px;border:1px solid #333;text-align:center;font-weight:bold;}';
+  html += 'td{padding:5px;border:1px solid #ccc;vertical-align:middle;}';
+  html += '.num{mso-number-format:"#,##0.00";text-align:left;}';
+  html += '.qty{mso-number-format:"#,##0.###";text-align:left;}';
+  html += '.center{text-align:center;}';
+  html += '.header{background:#dbeafe;font-weight:bold;font-size:14px;text-align:center;}';
+  html += '.opening{background:#fef3c7;font-weight:bold;}';
+  html += '.total{background:#2563eb;color:white;font-weight:bold;}';
+  html += '.balance-col{background:#f8fafc;font-weight:bold;}';
+  html += '</style></head><body><table border="1">';
+  html += '<tr class="header"><td colspan="12">كشف حساب عميل: ' + escapeHtml(data.customer) + '</td></tr>';
+  html += '<tr class="header"><td colspan="12">الفترة: ' + (data.dFrom||'البداية') + ' إلى ' + (data.dTo||'اليوم') + '</td></tr>';
+  html += '<tr><th>المسلسل</th><th>التاريخ</th><th>كود الصنف</th><th>اسم الصنف / البيان</th><th>نوع الحركة</th><th>الكمية</th><th>السعر</th><th>إجمالي السطر</th><th>رقم السند</th><th>مدين</th><th>دائن</th><th>الرصيد</th></tr>';
+  rows.forEach(function(r){
+    var rowClass = '';
+    if(r.itemName === 'رصيد منقول') rowClass = 'opening';
+    html += '<tr class="' + rowClass + '">';
+    html += '<td class="center">' + escapeHtml(String(r.serial)) + '</td>';
+    html += '<td class="center">' + escapeHtml(r.date || '') + '</td>';
+    html += '<td class="center">' + escapeHtml(r.itemCode || '') + '</td>';
+    html += '<td>' + escapeHtml(r.itemName || '') + '</td>';
+    html += '<td class="center">' + escapeHtml(r.type || '') + '</td>';
+    html += '<td class="qty">' + (r.qty !== '' ? r.qty : '') + '</td>';
+    html += '<td class="num">' + (r.price !== '' ? r.price : '') + '</td>';
+    html += '<td class="num">' + (r.lineTotal !== '' && r.lineTotal !== undefined ? r.lineTotal : '') + '</td>';
+    html += '<td class="center">' + escapeHtml(r.ref || '') + '</td>';
+    html += '<td class="num">' + (r.debit > 0 ? r.debit : '') + '</td>';
+    html += '<td class="num">' + (r.credit > 0 ? r.credit : '') + '</td>';
+    html += '<td class="num balance-col">' + (r.balance !== '' ? r.balance : '') + '</td>';
+    html += '</tr>';
+  });
+  html += '<tr class="total"><td colspan="9" class="center">الإجماليات</td><td class="num">' + data.totalDebit + '</td><td class="num">' + data.totalCredit + '</td><td class="num">' + data.finalBalance + '</td></tr>';
+  html += '</table></body></html>';
+  var blob = new Blob(['\uFEFF' + html], {type:'application/vnd.ms-excel;charset=utf-8'});
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'كشف_حساب_عميل_' + data.customer + '_' + new Date().toISOString().split('T')[0] + '.xls';
+  link.click();
+}
+
+// ✅ تصدير PDF بالعربية - النسخة النهائية المُصحَّحة
+function exportPdf(){
+  if(!window.lastReportData){alert('قم بعرض التقرير أولاً');return;}
+  if(typeof html2pdf === 'undefined'){
+    alert('مكتبة PDF لم تُحمَّل بعد. تأكد من الاتصال بالإنترنت.');
+    return;
+  }
+  
+  var data = window.lastReportData;
+  var rows = buildFlatRows();
+  
+  // ✅ عرض ثابت يتناسب مع A3 Landscape
+  var PAGE_WIDTH = 1600;
+  
+  var pdfContainer = document.createElement('div');
+  pdfContainer.id = 'pdfTempContainer';
+  pdfContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: ' + PAGE_WIDTH + 'px; background: white; z-index: -1; opacity: 0;';
+  
+  var pdfHtml = '<div style="font-family: Tahoma, Arial, sans-serif; direction: rtl; padding: 20px; background: white; width: ' + (PAGE_WIDTH - 40) + 'px; box-sizing: border-box;">';
+  
+  // العنوان
+  pdfHtml += '<div style="text-align: center; margin-bottom: 15px;">';
+  pdfHtml += '<h2 style="color: #1e40af; margin: 5px 0; font-size: 22px;">كشف حساب عميل</h2>';
+  pdfHtml += '<h3 style="color: #2563eb; margin: 5px 0; font-size: 18px;">' + escapeHtml(data.customer) + '</h3>';
+  pdfHtml += '<p style="color: #64748b; margin: 5px 0; font-size: 13px;">الفترة من: ' + (data.dFrom||'البداية') + ' إلى: ' + (data.dTo||'اليوم') + '</p>';
+  pdfHtml += '</div>';
+  
+  // ملخص الأرصدة
+  pdfHtml += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; table-layout: fixed;">';
+  pdfHtml += '<tr>';
+  pdfHtml += '<td style="background: #f59e0b; color: white; padding: 10px; text-align: center; border: 2px solid #fff; width: 25%;"><b>الرصيد المنقول</b><br><span style="font-size: 16px;">' + fmt(data.openingBalance) + '</span></td>';
+  pdfHtml += '<td style="background: #3b82f6; color: white; padding: 10px; text-align: center; border: 2px solid #fff; width: 25%;"><b>إجمالي المدين</b><br><span style="font-size: 16px;">' + fmt(data.totalDebit) + '</span></td>';
+  pdfHtml += '<td style="background: #10b981; color: white; padding: 10px; text-align: center; border: 2px solid #fff; width: 25%;"><b>إجمالي الدائن</b><br><span style="font-size: 16px;">' + fmt(data.totalCredit) + '</span></td>';
+  pdfHtml += '<td style="background: #2563eb; color: white; padding: 10px; text-align: center; border: 2px solid #fff; width: 25%;"><b>الرصيد النهائي</b><br><span style="font-size: 16px;">' + fmt(data.finalBalance) + '</span></td>';
+  pdfHtml += '</tr></table>';
+  
+  // ✅ الجدول - width: 100% + table-layout: fixed لضمان التمدد الصحيح
+  pdfHtml += '<table style="width: 100%; border-collapse: collapse; font-size: 11px; direction: rtl; table-layout: fixed;">';
+  pdfHtml += '<colgroup>';
+  pdfHtml += '<col style="width: 3%;">';   // #
+  pdfHtml += '<col style="width: 7%;">';   // التاريخ
+  pdfHtml += '<col style="width: 5%;">';   // الكود
+  pdfHtml += '<col style="width: 18%;">';  // الصنف
+  pdfHtml += '<col style="width: 10%;">';  // النوع
+  pdfHtml += '<col style="width: 6%;">';   // الكمية
+  pdfHtml += '<col style="width: 6%;">';   // السعر
+  pdfHtml += '<col style="width: 8%;">';   // إجمالي السطر
+  pdfHtml += '<col style="width: 8%;">';   // رقم السند
+  pdfHtml += '<col style="width: 9%;">';   // مدين
+  pdfHtml += '<col style="width: 9%;">';   // دائن
+  pdfHtml += '<col style="width: 11%;">';  // الرصيد
+  pdfHtml += '</colgroup>';
+  pdfHtml += '<thead><tr style="background: #2563eb; color: white;">';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">#</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">التاريخ</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">الكود</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">الصنف / البيان</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">نوع الحركة</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">الكمية</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">السعر</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">إجمالي السطر</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">رقم السند</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">مدين</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">دائن</th>';
+  pdfHtml += '<th style="padding: 8px 4px; border: 1px solid #1e40af;">الرصيد</th>';
+  pdfHtml += '</tr></thead><tbody>';
+  
+  rows.forEach(function(r){
+    var bgColor = '#ffffff';
+    if(r.itemName === 'رصيد منقول') bgColor = '#fef3c7';
+    
+    pdfHtml += '<tr style="background:' + bgColor + ';">';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: center; word-wrap: break-word;">' + escapeHtml(String(r.serial)) + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: center; font-size: 10px;">' + escapeHtml(r.date || '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: center;">' + escapeHtml(r.itemCode || '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: right; word-wrap: break-word;">' + escapeHtml(r.itemName || '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: center; font-size: 10px;">' + escapeHtml(r.type || '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: left; direction: ltr;">' + (r.qty !== '' ? fmtQty(r.qty) : '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: left; direction: ltr;">' + (r.price !== '' ? fmt(r.price) : '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: left; direction: ltr;">' + (r.lineTotal !== '' && r.lineTotal !== undefined ? fmt(r.lineTotal) : '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: center;">' + escapeHtml(r.ref || '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: left; direction: ltr; color: #dc2626;">' + (r.debit > 0 ? fmt(r.debit) : '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: left; direction: ltr; color: #16a34a;">' + (r.credit > 0 ? fmt(r.credit) : '') + '</td>';
+    pdfHtml += '<td style="padding: 5px 4px; border: 1px solid #cbd5e1; text-align: left; direction: ltr; background: #f8fafc; font-weight: bold;">' + (r.balance !== '' ? fmt(r.balance) : '') + '</td>';
+    pdfHtml += '</tr>';
+  });
+  
+  // صف الإجماليات
+  pdfHtml += '<tr style="background: #2563eb; color: white; font-weight: bold;">';
+  pdfHtml += '<td colspan="9" style="padding: 10px; border: 1px solid #1e40af; text-align: center; font-size: 13px;">الإجماليات</td>';
+  pdfHtml += '<td style="padding: 10px; border: 1px solid #1e40af; text-align: left; direction: ltr;">' + fmt(data.totalDebit) + '</td>';
+  pdfHtml += '<td style="padding: 10px; border: 1px solid #1e40af; text-align: left; direction: ltr;">' + fmt(data.totalCredit) + '</td>';
+  pdfHtml += '<td style="padding: 10px; border: 1px solid #1e40af; text-align: left; direction: ltr;">' + fmt(data.finalBalance) + '</td>';
+  pdfHtml += '</tr>';
+  
+  pdfHtml += '</tbody></table>';
+  
+  // التذييل
+  pdfHtml += '<div style="margin-top: 20px; text-align: center; color: #64748b; font-size: 11px;">';
+  pdfHtml += 'تم الإنشاء في: ' + new Date().toLocaleString('ar-EG');
+  pdfHtml += '</div>';
+  
+  pdfHtml += '</div>';
+  
+  pdfContainer.innerHTML = pdfHtml;
+  document.body.appendChild(pdfContainer);
+  
+  setStatus('🔄 جاري إنشاء PDF... قد يستغرق بضع ثواني', 'loading');
+  
+  var opt = {
+    margin: 5,
+    filename: 'كشف_حساب_عميل_' + data.customer + '_' + new Date().toISOString().split('T')[0] + '.pdf',
+    image: { type: 'jpeg', quality: 0.95 },
+    html2canvas: { 
+      scale: 1.5,
+      useCORS: true,
+      letterRendering: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      width: PAGE_WIDTH,
+      windowWidth: PAGE_WIDTH
+    },
+    jsPDF: { 
+      unit: 'mm', 
+      format: 'a3',
+      orientation: 'landscape',
+      compress: true
+    },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+  
+  setTimeout(function(){
+    html2pdf().set(opt).from(pdfContainer.firstChild).save().then(function(){
+      document.body.removeChild(pdfContainer);
+      setStatus('✅ تم تصدير PDF بنجاح', 'success');
+    }).catch(function(err){
+      if(document.body.contains(pdfContainer)){
+        document.body.removeChild(pdfContainer);
+      }
+      setStatus('❌ فشل التصدير: ' + err.message, 'error');
+      console.error(err);
+    });
+  }, 200);
+}
+function init(){
+  var today=new Date(),ya=new Date();ya.setFullYear(today.getFullYear()-1);
+  document.getElementById('dateTo').value=today.toISOString().split('T')[0];
+  document.getElementById('dateFrom').value=ya.toISOString().split('T')[0];
+  document.getElementById('btnLoad').addEventListener('click',buildReport);
+  document.getElementById('btnReload').addEventListener('click',loadAllData);
+  document.getElementById('btnPrint').addEventListener('click',function(){window.print();});
+  document.getElementById('btnPdf').addEventListener('click',exportPdf);
+  document.getElementById('btnExport').addEventListener('click',exportExcel);
+  document.getElementById('btnDebug').addEventListener('click',function(){var d=document.getElementById('debug');d.style.display=d.style.display==='none'?'block':'none';});
+  var si=document.getElementById('custSearch'),cb=document.getElementById('clearSearch');
+  si.addEventListener('input',function(){cb.classList.toggle('show',si.value.length>0);populateCustomerSelect(si.value);});
+  cb.addEventListener('click',function(){si.value='';cb.classList.remove('show');populateCustomerSelect('');si.focus();});
+  loadAllData();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+</body>
+</html>
