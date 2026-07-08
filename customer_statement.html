@@ -250,14 +250,20 @@ function buildReport(){
   allInvoices.forEach(function(v){
     if(v.item.customer===custKey){
       var isFx = isForeignCurrency(v.item);
+      // ✅ نأخذ القيمة بإشارتها الحقيقية بدل فرض القيمة المطلقة دائمًا
+      // فاتورة بقيمة سالبة (سطر دائن داخل الفاتورة نفسها) تُخصم من رصيد العميل
+      // بدلاً من أن تُضاف إليه كمدين - بنفس منطق الإشعارات الدائنة أدناه
+      var signedLocal = calcInvoiceTotalSignedLocal(v.item);
+      var isNegative = signedLocal < 0;
+      var absLocal = Math.abs(signedLocal);
       movements.push({
         date:(v.item.issueDate||'').split('T')[0],
-        type:'فاتورة بيع',
+        type: isNegative ? 'فاتورة بيع (دائن/تخفيض)' : 'فاتورة بيع',
         typeClass:'type-sinv',
         ref:v.item.reference||'-',
         desc:v.item.description||'',
-        debit:calcInvoiceTotal(v.item),
-        credit:0,
+        debit: isNegative ? 0 : absLocal,
+        credit: isNegative ? absLocal : 0,
         raw:v.item,
         kind:'invoice',
         isFx: isFx,
